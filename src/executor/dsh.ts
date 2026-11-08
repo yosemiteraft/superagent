@@ -18,6 +18,7 @@ import { WorktreeNameSchema } from '../app/assessment.ts'
 import { resultRelay } from '../app/notices.ts'
 import type { HealthEntry } from '../infra/health.ts'
 import { cancelled, collectJob, killJobs, runningJobs, stopBackground, stopSubagents, until, untilQuiet } from './background.ts'
+import type { SabWorkerDetails } from '../app/sab.ts'
 
 const now = (): string => new Date().toISOString()
 /** Returns the worker session ID (`worker-<ticketId>`) for a ticket. */
@@ -402,6 +403,14 @@ export class DshExecutor implements Executor {
   }
   /** Number of open tickets whose worker holds a worker slot: its turn runs, or its shell jobs or subagents still run after its turn ended. */
   activeCount(): number { return this.host.store.tickets.open().filter(ticket => this.running(ticket)).length }
+  /** Runtime diagnostics, not an LLM invocation trace. Excludes command texts and credentials. */
+  inspect(ticketId: string): SabWorkerDetails {
+    const ticket = this.host.store.tickets.get(ticketId)
+    const latest = ticket && latestAssignment(ticket)
+    return { backgroundJobCount: runningJobs(this.host.context, workerSessionId(ticketId)).length,
+      watchingBackground: this.settling.has(ticketId), retryBackoff: !!latest && this.resuming.has(latest.id),
+      holdsSlot: !!ticket && this.running(ticket) }
+  }
   /** Whether a ticket's worker holds a worker slot: its turn runs, or its shell jobs or subagents do after its turn ended. */
   private running(ticket: Ticket): boolean {
     if (!runningAssignment(ticket)) return false
