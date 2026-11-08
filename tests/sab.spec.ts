@@ -54,6 +54,15 @@ describe('R::SAB evidence and control boundaries', () => {
     expect(shown.lastConfirmed.fact).toBe('ended:stopped')
   })
 
+  it('distinguishes an idle model turn from live background work', () => {
+    const shown = sabTicket(sample({ assignments: [{ id: 'A-1', state: 'running', createdAt: date(1), startedAt: date(2) }] }),
+      false, 'idle', date(5), { backgroundJobCount: 2, watchingBackground: true, retryBackoff: false, holdsSlot: true })
+    expect(shown.worker.turn).toBe('idle')
+    expect(shown.worker.details?.backgroundJobCount).toBe(2)
+    expect(shown.worker.llmInvocation).toBe('unknown')
+    expect(shown.warnings.some(text => text.includes('Background shell jobs continue'))).toBe(true)
+  })
+
   it('Mermaid node IDs are generated rather than using untrusted Ticket IDs as syntax', () => {
     const item = sabTicket(sample({ id: 'T-1\"\nC --> D' }), false, 'unknown', date(5))
     const chart = sabMermaid([item])
