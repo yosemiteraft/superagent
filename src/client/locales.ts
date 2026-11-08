@@ -87,6 +87,7 @@ const TEXT = {
   problems: ['系统问题', 'System problems'],
   dismiss: ['不再提示', 'Dismiss'],
   saved: ['已保存', 'Saved'],
+  'tab.sab': ['态势行动板', 'SAB'],
   'tab.settings': ['设置', 'Settings'],
   statusTitle: ['状态', 'Status'],
   executingLabel: ['执行中', 'Executing'],
