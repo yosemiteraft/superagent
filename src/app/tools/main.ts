@@ -10,7 +10,7 @@ import { AssessmentSchema, EvalReadSchema, WorktreeNameSchema, type MasterAssess
 import { ticketCard } from '../cards.ts'
 import { PromptConfigSchema, savePrompts, type Prompts } from '../prompts.ts'
 import { readResource, type MainResourceHost, type ResourceHost } from '../resources.ts'
-import { sabSnapshot, type SabSnapshot, type WorkerTurn } from '../sab.ts'
+import { sabSnapshot, type SabSnapshot, type SabWorkerDetails, type WorkerTurn } from '../sab.ts'
 import { workerSessionId } from '../../executor/dsh.ts'
 import type { Sessions } from '../sessions.ts'
 import type { Settings } from '../settings.ts'
@@ -33,6 +33,7 @@ export interface MainToolsHost {
   requestPass(): void
   sendReplies(): Promise<void>
   recordSab(view: SabSnapshot): void
+  workerDetails(ticketId: string): SabWorkerDetails
   /** Runs an Engine command initiated by the main Session without emitting self-notifications. */
   quietly<T>(run: () => T): T
 }
@@ -170,9 +171,10 @@ export function mainTools(host: MainToolsHost, agent: Agent): Tool[] {
         const status = (id: string): WorkerTurn => { const observed = host.context.agents.get(workerSessionId(id) as SessionId)?.status
           return observed === 'running' || observed === 'idle' ? observed : 'unknown' }
         const tickets = host.store.tickets.open().slice(0, limit)
-        const view = sabSnapshot(tickets, host.store.settings().paused, status)
+        const view = sabSnapshot(tickets, host.store.settings().paused, status, undefined, id => host.workerDetails(id))
         // Archive the complete state, not a limited tool-response page.
-        host.recordSab(sabSnapshot(host.store.tickets.open(), host.store.settings().paused, status))
+        host.recordSab(sabSnapshot(host.store.tickets.open(), host.store.settings().paused, status, undefined,
+          id => host.workerDetails(id)))
         return { ...view, truncated: host.store.tickets.open().length > tickets.length }
       },
     }),
