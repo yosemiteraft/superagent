@@ -168,6 +168,7 @@ export class Runtime extends Service implements SourceHost {
       this.toolHost = { context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources,
         get github() { return runtime.context({ kind: 'github', health: ['github'] }) },
         requestPass: () => { passes.request() }, sendReplies: () => outbox.sent(),
+        recordSab: view => { this.sabArchive.capture(view) },
         quietly: run => { this.quiet++; try { return run() } finally { this.quiet-- } } }
       this.disposers.push(ctx.on('agent/status', ({ agent }) => {
         if (!agent.id.startsWith('worker-') || this.closing()) return
