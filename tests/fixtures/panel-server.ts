@@ -292,7 +292,9 @@ const SourceSave = z.object({ enabled: z.boolean(), config: z.unknown() })
 
 const ROUTES: { [K in keyof Api]: Route<K> } = {
   'GET state': { answer: stateView },
-  'GET sab': { answer: () => ({ ontology: 'R::SAB', schemaVersion: 1, observedAt: new Date().toISOString(),
+  'GET sab/history': { answer: () => [] },
+  'GET sab/history/:version': { answer: () => refuse(404, 'SAB archive version not found') },
+  'GET sab': { answer: () => ({ archive: { version: 1, at: new Date().toISOString(), diff: { added: [], removed: [], changed: [], workerTurnsChanged: [] } }, ontology: 'R::SAB', schemaVersion: 1, observedAt: new Date().toISOString(),
     processingPaused: server.settings.paused, summary: { openTickets: 0, workerTurnsRunning: 0, awaitingPerson: 0,
       queuedAssignments: 0, unknownWorkerTurns: 0 }, tickets: [], mermaid: 'flowchart LR\\n  O["R::Orchestrator"]' }) },
   'POST sab/tickets/:id/control': { body: true, answer: ({ params, body }) => {
