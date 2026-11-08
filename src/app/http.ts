@@ -28,6 +28,7 @@ import { sourcesStatus, type SetupState } from './views/sources.ts'
 import { decisionList, search, threadDetail, threadList } from './views/threads.ts'
 import { executorLoad, ticketDetail, ticketList } from './views/tickets.ts'
 import { sabSnapshot, type WorkerTurn } from './sab.ts'
+import type { SabArchive } from './sab-history.ts'
 import { IM_WORDS, wordCount } from '../infra/text.ts'
 
 export interface HttpHost {
@@ -41,6 +42,7 @@ export interface HttpHost {
   readonly engine: EngineForPeople & Pick<EngineForMainSession, 'note' | 'requestStatus'>
   readonly executor: Pick<DshExecutor, 'activeCount'>
   workerTurn(ticketId: string): WorkerTurn
+  readonly sabArchive: Pick<SabArchive, 'capture' | 'list' | 'get'>
   readonly health: Record<string, Health>
   readonly machine: Machine
   readonly masterId: string
@@ -159,7 +161,18 @@ function routes(runtime: HttpHost): Routes {
   const promptBody = (input: { body: (maxBytes?: number) => Promise<unknown> }) => input.body(4 * runtime.machine.promptMaxChars.get() + 4096)
   return {
     'GET state': () => stateView(runtime),
-    'GET sab': () => sabSnapshot(store.tickets.open(), store.settings().paused, id => runtime.workerTurn(id)),
+    'GET sab': () => {
+      const view = sabSnapshot(store.tickets.open(), store.settings().paused, id => runtime.workerTurn(id))
+      return { ...view, archive: runtime.sabArchive.capture(view) }
+    },
+    'GET sab/history': () => runtime.sabArchive.list(25),
+    'GET sab/history/:version': ({ params }) => {
+      const version = z.coerce.number().int().positive().safeParse(params.version)
+      if (!version.success) throw new RouteError(400, 'Invalid SAB archive version')
+      const entry = runtime.sabArchive.get(version.data)
+      if (!entry) throw new RouteError(404, 'SAB archive version not found')
+      return entry
+    },
     'POST sab/tickets/:id/control': async ({ params, body }) => {
       const command = SabControl.parse(await body(8192))
       const current = store.tickets.get(params.id)
