@@ -1,6 +1,7 @@
 /** Situation Action Board: live, evidence-labelled Ticket/Worker projections and guarded operator controls. */
 import { useState } from 'react'
 import type { SabTicket } from '../app/sab.ts'
+import type { SabArchiveSnapshot } from '../app/sab-history.ts'
 import { usePoll } from './api.ts'
 import { Button, Icon, Tag } from './controls.tsx'
 import { useAction, usePanel, usePanelData } from './provider.tsx'
@@ -78,6 +79,12 @@ export function SabPage() {
   const { call, notify } = usePanel()
   const { restarts } = usePanelData()
   const { data, error, reload } = usePoll(() => call('GET sab'), [call, restarts], 2500)
+  const { data: history, reload: reloadHistory } = usePoll(() => call('GET sab/history'), [call, restarts], 10000)
+  const [archive, setArchive] = useState<SabArchiveSnapshot>()
+  const showVersion = async (version: number) => {
+    try { setArchive(await call('GET sab/history/:version', { version: String(version) })) }
+    catch (failure) { notify(String(failure)) }
+  }
   const [showMermaid, setShowMermaid] = useState(false)
   return <section className="dt-sab">
     <div className="dt-status-head"><div><h2 className="dt-status-title">Situation Action Board · R::SAB</h2>
@@ -93,9 +100,22 @@ export function SabPage() {
         <span><strong>{data.summary.unknownWorkerTurns}</strong> unobserved turns</span>
         {data.processingPaused && <Tag tone="warning">Executor paused</Tag>}
       </div>
-      <p className="dt-hint">Observed {data.observedAt}. Solid edges in the Mermaid export refer to persisted records; inferred/pending relationships are dashed.</p>
+      <p className="dt-hint">Observed {data.observedAt} · Archive v{data.archive.version}. Solid edges in the Mermaid export refer to persisted records; inferred/pending relationships are dashed.</p>
       {data.tickets.length ? <div className="dt-sab-lanes">{data.tickets.map(ticket =>
         <TicketNode key={ticket.ticketId} value={ticket} refresh={reload} />)}</div> : <Hint>No open Tickets in the authoritative store.</Hint>}
+      <section className="dt-sab-history">
+        <div className="dt-sab-actions"><strong>Archived situation DIFF</strong><Button size="sm" variant="outline"
+          onClick={() => { void reloadHistory() }}>Refresh archive</Button>
+          {archive && <Button size="sm" onClick={() => setArchive(undefined)}>Close history</Button>}</div>
+        <div className="dt-sab-actions">{history?.slice(0, 12).map(entry =>
+          <Button key={entry.version} size="sm" variant="outline" onClick={() => { void showVersion(entry.version) }}>
+            v{entry.version} · +{entry.diff.added.length} / Δ{entry.diff.changed.length} / -{entry.diff.removed.length}
+          </Button>)}</div>
+        {archive && <div className="dt-sab-details"><strong>Historical R::SAB v{archive.version} · {archive.at}</strong>
+          <p className="dt-hint">Read-only evidence: displaying this archive does not roll back any Worker or Ticket.</p>
+          <pre className="dt-sab-code">{JSON.stringify(archive.diff, null, 2)}</pre>
+          <pre className="dt-sab-code">{archive.snapshot.mermaid}</pre></div>}
+      </section>
       <div className="dt-sab-export">
         <Button variant="outline" size="sm" onClick={() => setShowMermaid(!showMermaid)}>{showMermaid ? 'Hide' : 'Show'} Mermaid ontology</Button>
         <Button variant="outline" size="sm" onClick={() => {
