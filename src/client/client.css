@@ -404,5 +404,12 @@ a.dt-btn, a.dt-btn:hover { text-decoration: none; }
 .dt-sab-details ul { font-size:.82rem; padding-left:20px; max-height:130px; overflow:auto; }
 .dt-sab-code { white-space:pre; overflow:auto; padding:12px; border-radius:8px; border:1px solid var(--dsw-alias-border, #80808050); font-size:.75rem; flex-basis:100%; }
 .dt-sab-export { display:flex; flex-wrap:wrap; gap:8px; }
-@media (max-width:1050px) { .dt-sab-lane { grid-template-columns:1fr 12px 1fr; } .dt-sab-follow { grid-column:1/-1; } }
-@media (max-width:640px) { .dt-sab-lane { display:block; } .dt-sab-arrow { display:block; padding:4px; transform:rotate(90deg); } .dt-sab-worker,.dt-sab-follow { margin-top:9px; } }
+@media (max-width:1050px) {
+.dt-sab-lane { grid-template-columns:1fr 12px 1fr; }
+.dt-sab-follow { grid-column:1/-1; }
+}
+@media (max-width:640px) {
+.dt-sab-lane { display:block; }
+.dt-sab-arrow { display:block; padding:4px; transform:rotate(90deg); }
+.dt-sab-worker,.dt-sab-follow { margin-top:9px; }
+}
