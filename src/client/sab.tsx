@@ -42,6 +42,10 @@ function TicketNode({ value, refresh }: { value: SabTicket; refresh: () => Promi
         : value.worker.turn === 'unknown' ? 'warning' : 'quiet'}>{value.worker.turn}</Tag></div>
       <div className="dt-sab-sub"><code>{value.worker.sessionId}</code></div>
       <div className="dt-sab-inset">WorkerLLM · invocation <strong>unknown</strong></div>
+      {value.worker.details && <div className="dt-sab-sub">Background jobs: {value.worker.details.backgroundJobCount}
+        {' · '}Slot: {value.worker.details.holdsSlot ? 'held' : 'free'}
+        {value.worker.details.watchingBackground ? ' · settling' : ''}
+        {value.worker.details.retryBackoff ? ' · retry backoff' : ''}</div>}
       <div className="dt-sab-sub">Assignment: {value.assignment ? `${value.assignment.id} · ${value.assignment.state}` : 'not recorded'}</div>
       {value.assignment?.report && <div className="dt-sab-sub">Report: {value.assignment.report.state} · {value.assignment.report.at}</div>}
       <div className="dt-sab-actions"><SessionButton sessionId={value.worker.sessionId} />
