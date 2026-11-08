@@ -10,7 +10,7 @@ import { AssessmentSchema, EvalReadSchema, WorktreeNameSchema, type MasterAssess
 import { ticketCard } from '../cards.ts'
 import { PromptConfigSchema, savePrompts, type Prompts } from '../prompts.ts'
 import { readResource, type MainResourceHost, type ResourceHost } from '../resources.ts'
-import { sabSnapshot, type WorkerTurn } from '../sab.ts'
+import { sabSnapshot, type SabSnapshot, type WorkerTurn } from '../sab.ts'
 import { workerSessionId } from '../../executor/dsh.ts'
 import type { Sessions } from '../sessions.ts'
 import type { Settings } from '../settings.ts'
@@ -32,6 +32,7 @@ export interface MainToolsHost {
   /** Schedules a pass to carry out work queued by an Engine command (such as an Eval or ticket resume). */
   requestPass(): void
   sendReplies(): Promise<void>
+  recordSab(view: SabSnapshot): void
   /** Runs an Engine command initiated by the main Session without emitting self-notifications. */
   quietly<T>(run: () => T): T
 }
@@ -170,6 +171,8 @@ export function mainTools(host: MainToolsHost, agent: Agent): Tool[] {
           return observed === 'running' || observed === 'idle' ? observed : 'unknown' }
         const tickets = host.store.tickets.open().slice(0, limit)
         const view = sabSnapshot(tickets, host.store.settings().paused, status)
+        // Archive the complete state, not a limited tool-response page.
+        host.recordSab(sabSnapshot(host.store.tickets.open(), host.store.settings().paused, status))
         return { ...view, truncated: host.store.tickets.open().length > tickets.length }
       },
     }),
