@@ -96,3 +96,39 @@ it('answers a prompt save that lost a race with 409, and a settings body over 12
     body: { error: `Request exceeds ${128 * 1024} bytes` } })
   expect(saves).toEqual([])
 })
+
+it('SAB control checks observed Ticket version before using the Engine and reports only command acceptance', async () => {
+  const calls: string[] = []
+  const entry = { id: 't1', title: 'Ticket', createdAt: '2026-11-08T00:00:00Z',
+    updatedAt: '2026-11-08T00:01:00Z', assignments: [], inputs: [], undelivered: [] }
+  const archive = { capture: () => ({ version: 1, at: entry.updatedAt,
+    diff: { added: ['t1'], removed: [], changed: [], workerTurnsChanged: [] } }),
+    list: () => [], get: () => undefined }
+  const call = serve({
+    store: { tickets: { get: (id: string) => id === 't1' ? entry : undefined, open: () => [entry] },
+      settings: () => SettingsSchema.parse({}) },
+    sabArchive: archive,
+    workerTurn: () => 'unknown',
+    engine: { requestStatus: () => { calls.push('status'); return false },
+      stopTicket: () => { calls.push('stop') }, retryTicket: () => { calls.push('retry') },
+      note: () => { calls.push('note') } },
+    requestPass: () => { calls.push('pass') },
+  })
+  const current = await call('GET', 'sab')
+  expect(current).toMatchObject({ status: 200, body: { ontology: 'R::SAB', archive: { version: 1 } } })
+  expect(await call('GET', 'sab/history')).toEqual({ status: 200, body: [] })
+  expect(await call('GET', 'sab/history/999')).toMatchObject({ status: 404 })
+  expect(await call('POST', 'sab/tickets/t1/control',
+    { action: 'stop', expectedUpdatedAt: 'outdated' })).toMatchObject({ status: 409 })
+  expect(calls).toEqual([])
+  expect(await call('POST', 'sab/tickets/t1/control',
+    { action: 'request-status', expectedUpdatedAt: entry.updatedAt }))
+    .toMatchObject({ status: 200, body: { accepted: false, ticketId: 't1' } })
+  expect(calls).toEqual(['status', 'pass'])
+  expect(await call('POST', 'sab/tickets/t1/control',
+    { action: 'note', text: '', expectedUpdatedAt: entry.updatedAt })).toMatchObject({ status: 400 })
+  expect(await call('POST', 'sab/tickets/t1/control',
+    { action: 'stop', expectedUpdatedAt: entry.updatedAt })).toMatchObject({ status: 200,
+    body: { accepted: true, ticketId: 't1' } })
+  expect(calls).toEqual(['status', 'pass', 'stop', 'pass'])
+})
