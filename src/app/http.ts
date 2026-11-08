@@ -11,7 +11,7 @@ import { PromptConflict, SKILL_NAME, SKILL_PREFIX, TEAM_SECTIONS, builtInBase, b
 import { policyVersion } from '../policy.ts'
 import { SettingsConflict, type Settings } from './settings.ts'
 import { SetupError, type SetupProblem } from '../setup.ts'
-import { UserError, type EngineForPeople, type Ticket } from '../core/index.ts'
+import { UserError, type EngineForMainSession, type EngineForPeople, type Ticket } from '../core/index.ts'
 import type { Deployment, Machine } from '../deployment.ts'
 import type { DshExecutor } from '../executor/dsh.ts'
 import type { Health } from '../sources/host.ts'
@@ -27,6 +27,8 @@ import { settingsView } from './views/settings.ts'
 import { sourcesStatus, type SetupState } from './views/sources.ts'
 import { decisionList, search, threadDetail, threadList } from './views/threads.ts'
 import { executorLoad, ticketDetail, ticketList } from './views/tickets.ts'
+import { sabSnapshot, type WorkerTurn } from './sab.ts'
+import { IM_WORDS, wordCount } from '../infra/text.ts'
 
 export interface HttpHost {
   readonly store: Store
@@ -36,8 +38,9 @@ export interface HttpHost {
   readonly prompts: Pick<Prompts, 'current' | 'version' | 'history' | 'preview' | 'save' | 'defaultChanged'>
   readonly sessions: Pick<Sessions, 'status' | 'notify' | 'delivery'>
   readonly settings: Pick<Settings, 'view' | 'save' | 'pause' | 'sync' | 'refreshLabels'>
-  readonly engine: EngineForPeople
+  readonly engine: EngineForPeople & Pick<EngineForMainSession, 'note' | 'requestStatus'>
   readonly executor: Pick<DshExecutor, 'activeCount'>
+  workerTurn(ticketId: string): WorkerTurn
   readonly health: Record<string, Health>
   readonly machine: Machine
   readonly masterId: string
@@ -58,7 +61,7 @@ export interface HttpHost {
  * Represents a client-facing 400 or 404 error raised during management route parsing or lookup.
  * Route handlers throw it when request bodies are malformed or target records are missing, and registerHttp serializes its status and message in the HTTP response.
  */
-class RouteError extends Error { constructor(readonly status: 400 | 404, message: string) { super(message) } }
+class RouteError extends Error { constructor(readonly status: 400 | 404 | 409, message: string) { super(message) } }
 async function readBody(req: IncomingMessage, maxBytes = 128 * 1024): Promise<unknown> {
   let size = 0; const chunks: Buffer[] = []
   for await (const chunk of req) {
@@ -147,6 +150,8 @@ const PromptsQuery = z.object({ revision: count.optional(), offset: count.defaul
 const SourceBlock = z.templateLiteral(['source:', z.string().regex(/^[a-z][a-z0-9-]*$/)])
 const SettingsBlockSchema = z.union([z.enum(['policy', 'eval', 'executor']), SourceBlock])
 const SaveRequest = z.object({ value: z.unknown(), revision: z.number().int().nonnegative() })
+const SabControl = z.object({ action: z.enum(['request-status', 'note', 'retry', 'stop']), expectedUpdatedAt: z.string().min(1),
+  text: z.string().trim().min(1).max(3000).optional() }).strict()
 
 function routes(runtime: HttpHost): Routes {
   const { store } = runtime
@@ -154,6 +159,25 @@ function routes(runtime: HttpHost): Routes {
   const promptBody = (input: { body: (maxBytes?: number) => Promise<unknown> }) => input.body(4 * runtime.machine.promptMaxChars.get() + 4096)
   return {
     'GET state': () => stateView(runtime),
+    'GET sab': () => sabSnapshot(store.tickets.open(), store.settings().paused, id => runtime.workerTurn(id)),
+    'POST sab/tickets/:id/control': async ({ params, body }) => {
+      const command = SabControl.parse(await body(8192))
+      const current = store.tickets.get(params.id)
+      if (!current) throw new RouteError(404, 'Ticket not found')
+      if (current.updatedAt !== command.expectedUpdatedAt) throw new RouteError(409, 'Ticket state changed; refresh SAB before controlling it')
+      let accepted = true, reason = ''
+      switch (command.action) {
+        case 'request-status': accepted = runtime.engine.requestStatus(current.id); reason = accepted ? 'Status request queued' : 'No eligible idle worker'; break
+        case 'note': {
+          if (!command.text || wordCount(command.text) > IM_WORDS) throw new RouteError(400, 'Context note is missing or exceeds the allowed length')
+          runtime.engine.note(current.id, command.text); reason = 'Context recorded for worker; no new authority granted'; break
+        }
+        case 'retry': runtime.engine.retryTicket(current.id); reason = 'Retry requested; verify next SAB observation'; break
+        case 'stop': runtime.engine.stopTicket(current.id); reason = 'Stop requested; verify next SAB observation'; break
+      }
+      runtime.requestPass()
+      return { accepted, reason, ticketId: current.id }
+    },
     'GET overview': () => overview(views(runtime), runtime.health, policyVersion(store.settings()),
       executorLoad(store, runtime.executor.activeCount()), runtime.setupProblem ?? runtime.feishuProblem),
     'GET search': ({ query }) => search(views(runtime), query.q ?? '', runtime.sourceLinks),
