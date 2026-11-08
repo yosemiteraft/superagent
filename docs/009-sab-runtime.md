@@ -49,7 +49,7 @@ A failed committed-state capture logs a warning; it must not invalidate a previo
 
 ## Limits / next validation layer
 
-This release can distinguish DSH worker Agent turns from Ticket stages, but it **does not yet prove exact model invocation, tool-call IDs, detailed subagent and shell job lifecycles, or provider token usage**. Those require separate runtime observers and persisted correlation IDs. In particular, `working` may include background jobs while the agent's turn is `idle` — the board warns instead of falsifying a running model call.
+This release distinguishes DSH worker Agent turns, shell background-job counts, slot occupancy, background settlement, and transient-retry backoff from Ticket business stages, but it **does not yet prove exact model invocation, tool-call IDs, detailed subagent and shell job lifecycles, or provider token usage**. Those require separate runtime observers and persisted correlation IDs. In particular, `working` may include background jobs while the agent's turn is `idle` — the board warns instead of falsifying a running model call.
 
 A full test/deployment check requires installing this repository's DSH peer dependencies and running `pnpm check` (TypeScript + Vitest + build), followed by a controlled multi-Worker run. GitHub Actions are not required and are not invoked by this feature implementation. See also [007 Architecture](007-architecture.md) and [003 Execution](003-execution.md).
 
