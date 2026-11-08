@@ -27,7 +27,7 @@ import { settingsView } from './views/settings.ts'
 import { sourcesStatus, type SetupState } from './views/sources.ts'
 import { decisionList, search, threadDetail, threadList } from './views/threads.ts'
 import { executorLoad, ticketDetail, ticketList } from './views/tickets.ts'
-import { sabSnapshot, type WorkerTurn } from './sab.ts'
+import { sabSnapshot, type WorkerTurn, type SabWorkerDetails } from './sab.ts'
 import type { SabArchive } from './sab-history.ts'
 import { IM_WORDS, wordCount } from '../infra/text.ts'
 
@@ -40,8 +40,9 @@ export interface HttpHost {
   readonly sessions: Pick<Sessions, 'status' | 'notify' | 'delivery'>
   readonly settings: Pick<Settings, 'view' | 'save' | 'pause' | 'sync' | 'refreshLabels'>
   readonly engine: EngineForPeople & Pick<EngineForMainSession, 'note' | 'requestStatus'>
-  readonly executor: Pick<DshExecutor, 'activeCount'>
+  readonly executor: Pick<DshExecutor, 'activeCount' | 'inspect'>
   workerTurn(ticketId: string): WorkerTurn
+  workerDetails(ticketId: string): SabWorkerDetails
   readonly sabArchive: Pick<SabArchive, 'capture' | 'list' | 'get'>
   readonly health: Record<string, Health>
   readonly machine: Machine
@@ -162,7 +163,8 @@ function routes(runtime: HttpHost): Routes {
   return {
     'GET state': () => stateView(runtime),
     'GET sab': () => {
-      const view = sabSnapshot(store.tickets.open(), store.settings().paused, id => runtime.workerTurn(id))
+      const view = sabSnapshot(store.tickets.open(), store.settings().paused, id => runtime.workerTurn(id),
+        undefined, id => runtime.workerDetails(id))
       return { ...view, archive: runtime.sabArchive.capture(view) }
     },
     'GET sab/history': () => runtime.sabArchive.list(25),
