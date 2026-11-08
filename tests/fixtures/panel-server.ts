@@ -292,6 +292,15 @@ const SourceSave = z.object({ enabled: z.boolean(), config: z.unknown() })
 
 const ROUTES: { [K in keyof Api]: Route<K> } = {
   'GET state': { answer: stateView },
+  'GET sab': { answer: () => ({ ontology: 'R::SAB', schemaVersion: 1, observedAt: new Date().toISOString(),
+    processingPaused: server.settings.paused, summary: { openTickets: 0, workerTurnsRunning: 0, awaitingPerson: 0,
+      queuedAssignments: 0, unknownWorkerTurns: 0 }, tickets: [], mermaid: 'flowchart LR\\n  O["R::Orchestrator"]' }) },
+  'POST sab/tickets/:id/control': { body: true, answer: ({ params, body }) => {
+    const ticket = ticketOf(params.id)
+    if (!ticket) return refuse(404, 'Ticket not found')
+    if (body.action === 'stop') { server.tickets.open = server.tickets.open.filter(t => t.id !== params.id) }
+    return { accepted: true, reason: 'Control queued in panel fixture', ticketId: params.id }
+  } },
   'GET overview': { answer: overviewView },
   'GET search': { query: ['q'], answer: async ({ query }) => {
     const q = query.q ?? ''
