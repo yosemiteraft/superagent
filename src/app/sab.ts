@@ -103,7 +103,7 @@ export function sabTicket(ticket: Ticket, paused: boolean, turn: WorkerTurn, obs
   if (stage.stage === 'working' && turn === 'idle' && stage.action !== 'queued')
     warnings.push('Ticket working while the agent turn is idle; background work or pending reconciliation may explain this')
   return { ticketId: ticket.id, title: ticket.title,
-    ticket: { state: stage.stage, ...stage.action ? { action: stage.action } : {}, updatedAt: ticket.updatedAt,
+    ticket: { state: stage.stage, ...('action' in stage && stage.action ? { action: stage.action } : {}), updatedAt: ticket.updatedAt,
       ...ticket.ended ? { ended: ticket.ended } : {} },
     assignment: assignment ? { id: assignment.id, state: assignment.state,
       ...assignment.startedAt ? { startedAt: assignment.startedAt } : {},
@@ -112,23 +112,23 @@ export function sabTicket(ticket: Ticket, paused: boolean, turn: WorkerTurn, obs
         summary: assignment.report.summary.slice(0, 500) } } : {} } : null,
     worker, inputs, pendingInputIds: [...ticket.undelivered], evidence: events, lastConfirmed, next, allowed, warnings }
 }
-function safe(value: string): string { return value.replace(/[\r\n"\\]/g, ' ').replace(/[<>]/g, '').slice(0, 100) }
+function safe(value: string): string { return value.replace(/[\r\n"'\\\[\]{}()|%;#]/g, ' ').replace(/[<>]/g, '').slice(0, 100) }
 /** Mermaid represents derived state only; arrows with solid evidence require a real persisted association or start. */
 export function sabMermaid(tickets: SabTicket[]): string {
   const lines = ['flowchart LR', '  %% R::SAB: actual persisted records; worker-turn observations are ephemeral',
     '  O["R::Orchestrator · contains MainLLM"]']
   tickets.forEach((t, i) => {
-    const ticket = `T${i}`, assignment = `A${i}`, worker = `W${i}`, llm = `L${i}`
+    const ticket = `T${i}`, assignment = `A${i}`, worker = `W${i}`, llm = `L${i}`, execution = `X${i}`
     lines.push(`  ${ticket}[["R::Ticket ${safe(t.ticketId)} · ${safe(t.ticket.state)}"]]`)
     if (t.assignment) {
       lines.push(`  ${assignment}["R::Assignment ${safe(t.assignment.id)} · ${safe(t.assignment.state)}"]`)
       lines.push(`  ${ticket} ==>|persisted association| ${assignment}`)
     }
     lines.push(`  subgraph ${worker}["R::Worker ${safe(t.worker.sessionId)} · turn=${t.worker.turn}"]`,
-      `    ${llm}["R::WorkerLLM · owned context"]`, '  end')
+      `    ${llm}["R::WorkerLLM · owned context"]`, `    ${execution}["R::Worker runtime · ${t.worker.turn}"]`, '  end')
     if (t.assignment) lines.push(t.assignment.startedAt
-      ? `  ${assignment} ==>|recorded startedAt| ${llm}`
-      : `  ${assignment} -.->|launch pending or unverified| ${llm}`)
+      ? `  ${assignment} ==>|recorded startedAt| ${execution}`
+      : `  ${assignment} -.->|launch pending or unverified| ${execution}`)
     lines.push(`  O -.->|coordination · not a trace| ${ticket}`)
   })
   if (!tickets.length) lines.push('  E["No open Ticket · no Worker inferred"]', '  O -.-> E')
