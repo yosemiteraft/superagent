@@ -380,3 +380,30 @@ a.dt-btn, a.dt-btn:hover { text-decoration: none; }
 .dt-admission-slot { display: inline-flex; flex: none; width: 16px; }
 .dt-info-warn { color: var(--dsw-alias-state-warn-primary); }
 .dt-field-segmented { max-width: 240px; }
+
+
+/* SAB: Ticket is a double-bordered persistent state entity; Worker is an observed execution owner. */
+.dt-sab { display: grid; gap: 14px; min-width: 0; }
+.dt-sab-summary { display:flex; flex-wrap:wrap; gap:12px; padding:12px; border:1px solid var(--dsw-alias-border, #80808050); border-radius:10px; }
+.dt-sab-summary>span { display:flex; gap:6px; align-items:center; }
+.dt-sab-lanes { display:grid; gap:14px; }
+.dt-sab-lane { display:grid; grid-template-columns: minmax(180px,1.1fr) 16px minmax(180px,1fr) minmax(200px,1.25fr); gap:12px; align-items:start; border:1px solid var(--dsw-alias-border, #80808050); padding:12px; border-radius:10px; }
+.dt-sab-ticket { padding:12px; border:4px double var(--dsw-alias-border, #808080); border-radius:7px; min-height:135px; min-width:0; }
+.dt-sab-worker { padding:12px; border:1px solid var(--dsw-alias-border, #808080); border-radius:8px; min-height:135px; min-width:0; }
+.dt-sab-arrow { padding-top:52px; text-align:center; }
+.dt-sab-top { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.dt-sab-top h3 { font-size:1rem; margin:8px 0; overflow-wrap:anywhere; }
+.dt-sab-sub { color:var(--dsw-alias-text-secondary, #757575); font-size:.85rem; margin-top:6px; overflow-wrap:anywhere; }
+.dt-sab-inset { border:1px dashed var(--dsw-alias-border, #808080); border-radius:5px; padding:8px; margin:9px 0; }
+.dt-sab-follow { min-width:0; padding:4px 0; }
+.dt-sab-follow p { margin:7px 0; }
+.dt-sab-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+.dt-sab-warning { font-size:.82rem; color:var(--dsw-alias-danger, #b25d30); }
+.dt-sab-details { display:grid; gap:8px; border-top:1px solid var(--dsw-alias-border, #80808050); padding-top:10px; margin-top:12px; }
+.dt-sab-details textarea { width:100%; border-radius:6px; padding:8px; resize:vertical; box-sizing:border-box; color:inherit; background:transparent; border:1px solid var(--dsw-alias-border, #808080); }
+.dt-sab-details ul { font-size:.82rem; padding-left:20px; max-height:130px; overflow:auto; }
+.dt-sab-code { white-space:pre; overflow:auto; padding:12px; border-radius:8px; border:1px solid var(--dsw-alias-border, #80808050); font-size:.75rem; }
+.dt-sab-export { display:flex; flex-wrap:wrap; gap:8px; }
+.dt-sab-code { flex-basis:100%; }
+@media (max-width:1050px) { .dt-sab-lane { grid-template-columns:1fr 12px 1fr; } .dt-sab-follow { grid-column:1/-1; } }
+@media (max-width:640px) { .dt-sab-lane { display:block; } .dt-sab-arrow { display:block; padding:4px; transform:rotate(90deg); } .dt-sab-worker,.dt-sab-follow { margin-top:9px; } }
