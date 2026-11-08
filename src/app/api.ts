@@ -3,6 +3,7 @@ import type { ModelCatalog } from '@deepseek-ai/dsh-api-session-controller/types
 import type { PromptConfig, Prompts } from './prompts.ts'
 import type { PromptsView, StateView, TicketPageView } from './http.ts'
 import type { SabSnapshot } from './sab.ts'
+import type { SabArchiveEntry, SabArchiveSnapshot } from './sab-history.ts'
 import type { HistoryView } from './settings-history.ts'
 import type { OverviewView } from './views/overview.ts'
 import type { SettingsView } from './views/settings.ts'
@@ -20,7 +21,9 @@ type Delivery = 'injected' | 'pending'
 
 export interface Api {
   'GET state': { response: StateView }
-  'GET sab': { response: SabSnapshot }
+  'GET sab': { response: SabSnapshot & { archive: SabArchiveEntry } }
+  'GET sab/history': { response: SabArchiveEntry[] }
+  'GET sab/history/:version': { response: SabArchiveSnapshot }
   'POST sab/tickets/:id/control': { body: { action: 'request-status' | 'note' | 'retry' | 'stop'; expectedUpdatedAt: string; text?: string }; response: { accepted: boolean; reason: string; ticketId: string } }
   'GET overview': { response: OverviewView }
   'GET search': { query: { q: string }; response: SearchView }
