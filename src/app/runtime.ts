@@ -172,7 +172,9 @@ export class Runtime extends Service implements SourceHost {
         quietly: run => { this.quiet++; try { return run() } finally { this.quiet-- } } }
       this.disposers.push(ctx.on('agent/status', ({ agent }) => {
         if (!agent.id.startsWith('worker-') || this.closing()) return
-        try { this.captureSab() } catch (error) { ctx.logger.warn('SAB agent status capture failed: %s', String(error)) }
+        store.afterCommit(() => {
+          try { this.captureSab() } catch (error) { ctx.logger.warn('SAB agent status capture failed: %s', String(error)) }
+        })
       }))
       this.captureSab()
       this.ready = this.initialize()
