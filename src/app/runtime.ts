@@ -233,13 +233,14 @@ export class Runtime extends Service implements SourceHost {
     return status === 'running' || status === 'idle' ? status : 'unknown'
   }
   private captureSab(): void {
-    this.sabArchive.capture(sabSnapshot(this.store.tickets.open(), this.store.settings().paused, id => this.workerTurn(id)))
+    this.sabArchive.capture(sabSnapshot(this.store.tickets.open(), this.store.settings().paused, id => this.workerTurn(id), undefined,
+      id => this.executor.inspect(id)))
   }
   private httpHost(): HttpHost {
     const runtime = this
     const { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, setup, passes } = this
     return { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks,
-      sabArchive: this.sabArchive, workerTurn: id => this.workerTurn(id),
+      sabArchive: this.sabArchive, workerTurn: id => this.workerTurn(id), workerDetails: id => this.executor.inspect(id),
       get deployment() { return setup.deployment },
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem },
       configured: () => setup.configured(), links: () => runtime.links(), ticketEnvironment: ticket => runtime.ticketEnvironment(ticket),
