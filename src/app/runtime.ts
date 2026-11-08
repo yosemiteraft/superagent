@@ -30,7 +30,8 @@ import { TextCache } from './cache.ts'
 import { Effects } from './effects.ts'
 import { Prompts } from './prompts.ts'
 import { registerHttp, type HttpHost } from './http.ts'
-import type { WorkerTurn } from './sab.ts'
+import { sabSnapshot, type WorkerTurn } from './sab.ts'
+import { SabArchive } from './sab-history.ts'
 import type { LinkTarget } from './views/records.ts'
 import { candidateCard, repliedTo, sourceLink, type LinkHost } from './links.ts'
 import { eventNotice, followupNotice } from './notices.ts'
@@ -59,6 +60,7 @@ const now = (): string => new Date().toISOString()
  */
 export class Runtime extends Service implements SourceHost {
   readonly store: Store
+  readonly sabArchive: SabArchive
   readonly setup: Setup
   readonly prompts: Prompts
   readonly effects: Effects
@@ -97,6 +99,7 @@ export class Runtime extends Service implements SourceHost {
     try {
       const report = (error: unknown) => { ctx.logger.warn('dsh-superagent: %s', String(error)) }
       const store = opened = this.store = new Store(join(machine.stateDir, 'orchestrator.sqlite'), report)
+      this.sabArchive = new SabArchive(store)
       const setup = this.setup = new Setup({ context: ctx, machine, lifetime: this.lifetime, restart })
       const deployed = () => setup.configured()
         ? environmentOf({ deployment: setup.deployment, sources: this.sources, settings: store.settings() }) : undefined
@@ -138,6 +141,8 @@ export class Runtime extends Service implements SourceHost {
       const engine = this.engine = new Engine({ repo: store, scope: sources, policy, assessor, executor,
         outbox, prepareTicket: (ticket, outcome) => executor.prepare(ticket, outcome), emit: event => {
           // Notify the main Session only about domain events it did not initiate itself.
+          // Archive the committed state only; a transaction may still roll back after emit.
+          store.afterCommit(() => { try { runtime.captureSab() } catch (error) { ctx.logger.warn('SAB snapshot failed: %s', String(error)) } })
           const notice = this.quiet ? undefined : eventNotice(event, id => store.tickets.get(id))
           if (notice) sessions.notify(...notice)
           // A person's message that reached an open ticket is the ticket's; the main Session hears of it in the same transaction,
@@ -164,6 +169,11 @@ export class Runtime extends Service implements SourceHost {
         get github() { return runtime.context({ kind: 'github', health: ['github'] }) },
         requestPass: () => { passes.request() }, sendReplies: () => outbox.sent(),
         quietly: run => { this.quiet++; try { return run() } finally { this.quiet-- } } }
+      this.disposers.push(ctx.on('agent/status', ({ agent }) => {
+        if (!agent.id.startsWith('worker-') || this.closing()) return
+        try { this.captureSab() } catch (error) { ctx.logger.warn('SAB agent status capture failed: %s', String(error)) }
+      }))
+      this.captureSab()
       this.ready = this.initialize()
     } catch (error) {
       // Release the database and state lock if initialization fails so an in-process restart can reacquire them.
@@ -217,12 +227,18 @@ export class Runtime extends Service implements SourceHost {
     this.effects.start()
     this.runtimeHealth.set({ state: 'ready', detail: 'Orchestrator is ready', at: now() })
   }
+  private workerTurn(id: string): WorkerTurn {
+    const status = this.ctx.agents.get(workerSessionId(id) as SessionId)?.status
+    return status === 'running' || status === 'idle' ? status : 'unknown'
+  }
+  private captureSab(): void {
+    this.sabArchive.capture(sabSnapshot(this.store.tickets.open(), this.store.settings().paused, id => this.workerTurn(id)))
+  }
   private httpHost(): HttpHost {
     const runtime = this
     const { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, setup, passes } = this
     return { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks,
-      workerTurn: (id): WorkerTurn => { const state = this.ctx.agents.get(workerSessionId(id) as SessionId)?.status
-        return state === 'running' || state === 'idle' ? state : 'unknown' },
+      sabArchive: this.sabArchive, workerTurn: id => this.workerTurn(id),
       get deployment() { return setup.deployment },
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem },
       configured: () => setup.configured(), links: () => runtime.links(), ticketEnvironment: ticket => runtime.ticketEnvironment(ticket),
