@@ -1,6 +1,7 @@
 /** Main Session tools for routing triggers, assessing candidates, sending replies, and updating settings and prompts. */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import { z } from 'zod'
 import { UserError, followupOwners, key, reasonText, type Decision, type DecisionKind, type EngineForMainSession, type EngineForPeople }
   from '../../core/index.ts'
@@ -9,6 +10,8 @@ import { AssessmentSchema, EvalReadSchema, WorktreeNameSchema, type MasterAssess
 import { ticketCard } from '../cards.ts'
 import { PromptConfigSchema, savePrompts, type Prompts } from '../prompts.ts'
 import { readResource, type MainResourceHost, type ResourceHost } from '../resources.ts'
+import { sabSnapshot, type WorkerTurn } from '../sab.ts'
+import { workerSessionId } from '../../executor/dsh.ts'
 import type { Sessions } from '../sessions.ts'
 import type { Settings } from '../settings.ts'
 import type { Store } from '../store.ts'
@@ -158,6 +161,18 @@ export function mainTools(host: MainToolsHost, agent: Agent): Tool[] {
     readTool('Read one page of a resource the resource parameter lists, such as the ticket list or a ticket. Follow next_offset, and next_resource where a page names one.',
       false, (resource, offset, limit, signal) => readResource(resources, resource, offset, limit, undefined, signal)),
     routeTool(host),
+    tool({
+      name: 'orchestrator_sab',
+      description: 'Read the evidence-aware R::SAB situation board for all open Tickets and their Workers. State is derived from the persistent Ticket store plus live agent-turn observations. Includes next actions and C::Capability references. Never mistake predicted actions or a Ticket working stage for an actual LLM invocation.',
+      schema: z.object({ limit: z.number().int().min(1).max(60).default(40) }).strict(),
+      execute: async ({ limit }) => {
+        const status = (id: string): WorkerTurn => { const observed = host.context.agents.get(workerSessionId(id) as SessionId)?.status
+          return observed === 'running' || observed === 'idle' ? observed : 'unknown' }
+        const tickets = host.store.tickets.open().slice(0, limit)
+        const view = sabSnapshot(tickets, host.store.settings().paused, status)
+        return { ...view, truncated: host.store.tickets.open().length > tickets.length }
+      },
+    }),
     tool({
       name: 'orchestrator_ticket_retry',
       description: 'Start a new assignment on an explicit human request to retry a ticket whose worker reported failed or blocked, or whose input was not delivered; the stalled one ends.',
