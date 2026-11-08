@@ -5,6 +5,7 @@
 import { canRetry, latestAssignment, ticketStage, type Ticket } from '../core/index.ts'
 
 export type WorkerTurn = 'running' | 'idle' | 'unknown'
+export interface SabWorkerDetails { backgroundJobCount: number; watchingBackground: boolean; retryBackoff: boolean; holdsSlot: boolean }
 export type SabEvidence = {
   source: 'ticket' | 'assignment' | 'report' | 'input' | 'worker-agent'
   ref: string
@@ -24,7 +25,7 @@ export type SabTicket = {
   title: string
   ticket: { state: string; action?: string; updatedAt: string; ended?: Ticket['ended'] }
   assignment: { id: string; state: string; startedAt?: string; endedAt?: string; report?: { state: string; at: string; summary: string } } | null
-  worker: { instanceId: string; sessionId: string; turn: WorkerTurn; observedAt: string; llmInvocation: 'unknown' }
+  worker: { instanceId: string; sessionId: string; turn: WorkerTurn; observedAt: string; llmInvocation: 'unknown'; details?: SabWorkerDetails }
   inputs: SabInput[]
   pendingInputIds: string[]
   lastConfirmed: SabEvidence
@@ -44,6 +45,7 @@ export type SabSnapshot = {
 }
 
 export type WorkerStatus = (ticketId: string) => WorkerTurn
+export type WorkerDetailStatus = (ticketId: string) => SabWorkerDetails | undefined
 
 function event(source: SabEvidence['source'], ref: string, at: string, fact: string): SabEvidence {
   return { source, ref, at, fact }
@@ -56,7 +58,7 @@ function note(capabilityRef: string, operation: SabAction['operation'], actor: S
   eligible = true): SabAction {
   return { capabilityRef, operation, actor, reason, eligible }
 }
-export function sabTicket(ticket: Ticket, paused: boolean, turn: WorkerTurn, observedAt: string): SabTicket {
+export function sabTicket(ticket: Ticket, paused: boolean, turn: WorkerTurn, observedAt: string, details?: SabWorkerDetails): SabTicket {
   const stage = ticketStage(ticket)
   const assignment = latestAssignment(ticket)
   const events = [event('ticket', `ticket:${ticket.id}`, ticket.createdAt, 'created')]
@@ -80,7 +82,7 @@ export function sabTicket(ticket: Ticket, paused: boolean, turn: WorkerTurn, obs
   })
   const lastConfirmed = newest(events)
   const worker = { instanceId: `worker-${ticket.id}`, sessionId: `worker-${ticket.id}`, turn, observedAt,
-    llmInvocation: 'unknown' as const }
+    llmInvocation: 'unknown' as const, ...details ? { details } : {} }
   const allowed: SabAction[] = [
     note('C::Worker.Observe', 'observe', 'system', 'Read persisted state and live agent-turn status'),
     note('C::Worker.Report', 'request-status', 'main', 'Ask for a report only when Engine policy permits', stage.stage === 'idle'),
@@ -100,6 +102,7 @@ export function sabTicket(ticket: Ticket, paused: boolean, turn: WorkerTurn, obs
   const warnings: string[] = []
   if (turn === 'unknown') warnings.push('Worker turn is unobserved; persisted Assignment state is not proof of current execution')
   if (ticket.delivery) warnings.push('Recorded input delivery failure')
+  if (details?.backgroundJobCount && turn !== 'running') warnings.push('Background shell jobs continue while the main Worker turn is not running')
   if (stage.stage === 'working' && turn === 'idle' && stage.action !== 'queued')
     warnings.push('Ticket working while the agent turn is idle; background work or pending reconciliation may explain this')
   return { ticketId: ticket.id, title: ticket.title,
@@ -135,8 +138,8 @@ export function sabMermaid(tickets: SabTicket[]): string {
   return lines.join('\n')
 }
 export function sabSnapshot(tickets: Ticket[], paused: boolean, status: WorkerStatus,
-  observedAt = new Date().toISOString()): SabSnapshot {
-  const items = tickets.map(ticket => sabTicket(ticket, paused, status(ticket.id), observedAt))
+  observedAt = new Date().toISOString(), details?: WorkerDetailStatus): SabSnapshot {
+  const items = tickets.map(ticket => sabTicket(ticket, paused, status(ticket.id), observedAt, details?.(ticket.id)))
   return { ontology: 'R::SAB', schemaVersion: 1, observedAt, processingPaused: paused,
     summary: { openTickets: tickets.filter(ticket => !ticket.ended).length,
       workerTurnsRunning: items.filter(item => item.worker.turn === 'running').length,
