@@ -8,7 +8,7 @@ export interface SabArchiveEntry { version: number; at: string; diff: SabDiff }
 export interface SabArchiveSnapshot extends SabArchiveEntry { snapshot: SabSnapshot }
 function semantic(ticket: SabTicket) {
   return { ticketId: ticket.ticketId, ticket: ticket.ticket, assignment: ticket.assignment, inputs: ticket.inputs,
-    pendingInputIds: ticket.pendingInputIds, workerTurn: ticket.worker.turn, next: ticket.next, lastConfirmed: ticket.lastConfirmed,
+    pendingInputIds: ticket.pendingInputIds, workerTurn: ticket.worker.turn, workerDetails: ticket.worker.details, next: ticket.next, lastConfirmed: ticket.lastConfirmed,
     warnings: ticket.warnings }
 }
 function fingerprint(snapshot: SabSnapshot): string {
